@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Classroom Preview</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.7/dat.gui.min.js"></script>
+    <script>
+        // Classroom setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        directionalLight.position.set(5, 5, 5);
+        scene.add(directionalLight);
+
+        // Floor
+        const floorGeometry = new THREE.PlaneGeometry(20, 20);
+        const floorMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc });
+        const floorMesh = new THREE.Mesh(floorGeometry, floorMaterial);
+        floorMesh.rotation.x = -Math.PI / 2;
+        scene.add(floorMesh);
+
+        // Walls
+        const wallMaterial = new THREE.MeshStandardMaterial({ color: 0xeeeeee });
+        
+        const backWall = new THREE.Mesh(new THREE.PlaneGeometry(20, 10), wallMaterial);
+        backWall.position.z = -10;
+        backWall.position.y = 5;
+        scene.add(backWall);
+
+        const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(20, 10), wallMaterial);
+        leftWall.position.x = -10;
+        leftWall.position.y = 5;
+        leftWall.rotation.y = Math.PI / 2;
+        scene.add(leftWall);
+
+        const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(20, 10), wallMaterial);
+        rightWall.position.x = 10;
+        rightWall.position.y = 5;
+        rightWall.rotation.y = -Math.PI / 2;
+        scene.add(rightWall);
+
+        // Whiteboard
+        const whiteboardGeometry = new THREE.PlaneGeometry(10, 5);
+        const whiteboardMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff });
+        const whiteboardMesh = new THREE.Mesh(whiteboardGeometry, whiteboardMaterial);
+        whiteboardMesh.position.set(0, 5, -9.9);
+        scene.add(whiteboardMesh);
+
+        // Teacher's desk
+        const deskGeometry = new THREE.BoxGeometry(3, 1, 1.5);
+        const deskMaterial = new THREE.MeshStandardMaterial({ color: 0x8b4513 });
+        const deskMesh = new THREE.Mesh(deskGeometry, deskMaterial);
+        deskMesh.position.set(0, 0.5, -8);
+        scene.add(deskMesh);
+
+        // Student desks
+        const createStudentDesk = (x, z) => {
+            const desk = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.75, 1), deskMaterial);
+            desk.position.set(x, 0.375, z);
+            scene.add(desk);
+        };
+
+        for (let i = -3; i <= 3; i += 3) {
+            for (let j = -4; j <= 0; j += 2) {
+                createStudentDesk(i, j);
+            }
+        }
+
+        // Teacher
+        class Teacher {
+            constructor(scene) {
+                const geometry = new THREE.CylinderGeometry(0.3, 0.5, 2, 32);
+                const material = new THREE.MeshStandardMaterial({ color: 0x0000ff });
+                this.mesh = new THREE.Mesh(geometry, material);
+                this.mesh.position.set(0, 1, -7);
+                scene.add(this.mesh);
+                this.speed = 0.1;
+            }
+
+            moveLeft() {
+                this.mesh.position.x -= this.speed;
+            }
+
+            moveRight() {
+                this.mesh.position.x += this.speed;
+            }
+
+            moveForward() {
+                this.mesh.position.z -= this.speed;
+            }
+
+            moveBackward() {
+                this.mesh.position.z += this.speed;
+            }
+        }
+
+        const teacher = new Teacher(scene);
+
+        // Raycaster for whiteboard interaction
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        function onMouseClick(event) {
+            mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObject(whiteboardMesh);
+
+            if (intersects.length > 0) {
+                const intersect = intersects[0];
+                const point = intersect.point;
+                const dotGeometry = new THREE.SphereGeometry(0.05);
+                const dotMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+                const dot = new THREE.Mesh(dotGeometry, dotMaterial);
+                dot.position.copy(point);
+                scene.add(dot);
+            }
+        }
+
+        window.addEventListener('click', onMouseClick, false);
+
+        // Keyboard controls
+        function onKeyDown(event) {
+            switch (event.key) {
+                case 'ArrowLeft':
+                    teacher.moveLeft();
+                    break;
+                case 'ArrowRight':
+                    teacher.moveRight();
+                    break;
+                case 'ArrowUp':
+                    teacher.moveForward();
+                    break;
+                case 'ArrowDown':
+                    teacher.moveBackward();
+                    break;
+            }
+        }
+
+        window.addEventListener('keydown', onKeyDown, false);
+
+        // Camera setup
+        camera.position.set(0, 5, 10);
+
+        // OrbitControls
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.target.set(0, 0, -5);
+        controls.update();
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Handle window resize
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        window.addEventListener('resize', onWindowResize, false);
+
+        // GUI for adjusting light intensity
+        const gui = new dat.GUI();
+        const lightFolder = gui.addFolder('Lights');
+        lightFolder.add(ambientLight, 'intensity', 0, 1, 0.1).name('Ambient Light');
+        lightFolder.add(directionalLight, 'intensity', 0, 1, 0.1).name('Directional Light');
+        lightFolder.open();
+    </script>
+</body>
+</html>
+
